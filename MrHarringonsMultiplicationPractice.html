@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Multiplication Flashcards</title>
+<style>
+  :root{
+    --bg:#f0f8ff; --ok:#4caf50; --warn:#ffa500; --bad:#e53935;
+    --blue1:#4da6ff; --blue2:#3399ff; --blue3:#1a8cff; --blue4:#0066cc;
+    --qsize:68px; /* base flashcard text size, JS will fit it if needed */
+  }
+  body{font-family:Inter,Roboto,Arial,sans-serif;background:var(--bg);margin:0;color:#111}
+  .container{max-width:920px;margin:0 auto;padding:18px;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:32px;margin:10px 0 16px;text-align:center}
+  .grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0 14px}
+
+  /* Table buttons (pastel per table) */
+  .table-btn{
+    width:60px;height:60px;font-size:22px;font-weight:700;border-radius:10px;border:0;
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.2); color:#122;
+  }
+  .table-btn.selected{outline:3px solid #333; outline-offset:2px}
+
+  /* Difficulty */
+  .difficulty-btn{width:140px;height:48px;border-radius:10px;border:0;color:#fff;font-weight:700;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;margin:4px}
+  .difficulty-btn.easy{background:var(--blue1)}
+  .difficulty-btn.medium{background:var(--blue2)}
+  .difficulty-btn.hard{background:var(--blue3)}
+  .difficulty-btn.expert{background:var(--blue4)}
+  .difficulty-btn.selected{outline:3px solid gold;outline-offset:3px}
+  #startBtn{font-size:18px;padding:12px 20px;border-radius:10px;border:0;background:#222;color:#fff;opacity:.6;
+    cursor:pointer;display:block;margin:0 auto}
+  #startBtn.enabled{opacity:1}
+
+  /* Progress */
+  .progressRow{width:100%;display:flex;align-items:center;gap:12px;margin:12px 0}
+  .progressText{font-size:16px;min-width:140px;text-align:left}
+  .bar{flex:1;height:18px;background:#ddd;border-radius:10px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--ok);transition:width .3s linear}
+
+  /* Question flashcard (centered, double height, single-line, dynamic font) */
+  .qcard{
+    width: min(88vw, 300px); max-width:92vw;
+    height:180px; /* twice as tall */
+    font-size:var(--qsize); font-weight:800; text-align:center;
+    border-radius:16px; box-shadow:0 6px 14px rgba(0,0,0,.15);
+    margin:16px auto; display:flex; align-items:center; justify-content:center;
+    gap:14px; padding:0 18px; /* side padding so input line stays inside */
+    /* IMPORTANT: keep the whole equation on one line */
+    flex-wrap:nowrap; white-space:nowrap; overflow:hidden;
+  }
+  .qpart{flex:0 0 auto}
+  .inlineInput{
+    font-size:var(--qsize); font-weight:800; text-align:center;
+    width:calc(3ch + 10px); min-width:calc(2ch + 10px); max-width:calc(3ch + 10px);
+    background:transparent; border:none; outline:none;
+    border-bottom:5px solid rgba(0,0,0,.35); padding:2px 6px;
+    box-sizing:content-box; flex:0 0 auto;
+  }
+  .inlineInput::placeholder{color:rgba(0,0,0,.35)}
+  .inlineInput::-webkit-outer-spin-button,
+  .inlineInput::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .inlineInput[type=number]{ -moz-appearance:textfield; }
+
+  /* Timer & messages */
+  .countdown{width:90%;height:14px;background:#eee;border-radius:10px;overflow:hidden;margin:12px 0}
+  .timefill{height:100%;width:100%;background:var(--ok);transition:width .12s linear}
+  .msg{font-size:22px;min-height:28px;margin:10px 0;opacity:0;transition:opacity .35s;text-align:center}
+  .msg.show{opacity:1}
+  .msg.correct{color:var(--ok)}
+  .msg.wrong{color:var(--bad)}
+  .msg.timeout{color:var(--warn)}
+
+  /* Visuals row */
+  #visualWrap{width:100%;overflow-x:hidden;display:flex;justify-content:center}
+  .visual{display:flex;flex-wrap:nowrap;gap:8px;align-items:flex-end;justify-content:center;padding:8px}
+  .group{display:flex;flex-direction:column;align-items:center;opacity:1;flex-shrink:0}
+  .oval{
+    border-radius:16px; background:#fff8dc; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.25);
+    filter:grayscale(100%); opacity:.25;
+    transition:filter .9s ease, opacity .9s ease, transform .24s ease-out;
+    transform:scale(.9);
+  }
+  @keyframes popIn {0%{transform:scale(.85)} 70%{transform:scale(1.06)} 100%{transform:scale(1)}}
+  .group.show .oval{filter:grayscale(0%);opacity:1; animation:popIn .24s ease-out both}
+  .oval span{display:block;line-height:1.2;margin:2px 0}
+  .groupNumber{margin-top:6px;font-weight:700;font-size:16px}
+
+  /* Summary */
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+  th,td{border:1px solid #bbb;padding:6px;text-align:center}
+  th{background:#eee}
+  td.resultIcon{font-size:18px}
+
+  .controls{display:flex;gap:10px;justify-content:center;margin-top:10px}
+  .btn{padding:8px 12px;border-radius:8px;border:none;background:#222;color:#fff;cursor:pointer}
+
+  .practice-cards{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:10px}
+  .flashcard{width:90px;height:70px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;
+    border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.12); color:#122}
+
+  @media (max-width:420px){
+    .qcard{height:160px}
+  }
+
+
+
+
+/* V60: Centered dual-sided countdown using existing markup (.countdown > #countdownFill) */
+.countdown {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+  height: 8px;
+  background: rgba(0,0,0,0.12);
+  border-radius: 999px;
+  margin: 0.5rem auto;
+  overflow: hidden;
+  max-width: 90%;
+}
+#countdownFill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: #25c14a;
+  transform-origin: center;
+  transform: scaleX(1);
+  transition: transform .12s linear;
+}
+
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div id="setup">
+    <h1>Multiplication Practice</h1>
+    <p style="text-align:center">Select tables to practice</p>
+    <div id="tableGrid" class="grid"></div>
+    <p style="text-align:center">Choose Difficulty</p>
+    <div id="difficultyGrid" class="grid">
+      <button class="difficulty-btn easy" data-level="easy">Easy (10s)</button>
+      <button class="difficulty-btn medium" data-level="medium">Medium (7s)</button>
+      <button class="difficulty-btn hard" data-level="hard">Hard (5s)</button>
+      <button class="difficulty-btn expert" data-level="expert">Expert (3s)</button>
+    </div>
+    <button id="startBtn" disabled>Start Practice</button>
+  </div>
+
+  <div id="game" style="display:none;width:100%">
+    <div class="progressRow">
+      <div class="progressText" id="progressText"></div>
+      <div class="bar"><div id="progressFill" class="fill"></div></div>
+    </div>
+
+    <!-- Centered flashcard with embedded answer (stays on ONE line) -->
+    <div id="question" class="qcard"></div>
+
+    <div class="countdown"><div id="countdownFill" class="timefill"></div></div>
+    <div id="message" class="msg"></div>
+
+    <div id="visualWrap"><div id="visual" class="visual"></div></div>
+
+    <div class="controls"><button id="restartBtn" class="btn">🔄 Choose New Tables</button></div>
+  </div>
+
+  <div id="summary" style="display:none;width:100%">
+    <h2 style="text-align:center">Session Summary</h2>
+    <table id="summaryTable"><thead><tr><th>#</th><th>Q</th><th>Result</th><th>Time</th></tr></thead><tbody></tbody></table>
+    <div id="practiceList" style="margin-top:14px"></div>
+    <div style="text-align:center;margin-top:8px">
+      <button id="practiceAgainBtn" class="btn">Practice These Facts Again</button>
+      <button id="restartAllBtn" class="btn">Restart</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- DOM ---------- */
+const tableGrid=document.getElementById('tableGrid');
+const difficultyGrid=document.getElementById('difficultyGrid');
+const startBtn=document.getElementById('startBtn');
+const setupDiv=document.getElementById('setup');
+const gameDiv=document.getElementById('game');
+const summaryDiv=document.getElementById('summary');
+const questionEl=document.getElementById('question');
+const visual=document.getElementById('visual');
+const countdownFill=document.getElementById('countdownFill');
+const progressText=document.getElementById('progressText');
+const progressFill=document.getElementById('progressFill');
+const restartBtn=document.getElementById('restartBtn');
+const summaryTable=document.querySelector('#summaryTable tbody');
+const practiceList=document.getElementById('practiceList');
+const practiceAgainBtn=document.getElementById('practiceAgainBtn');
+const restartAllBtn=document.getElementById('restartAllBtn');
+const messageEl=document.getElementById('message');
+
+let answerEl=null;
+
+/* ---------- State ---------- */
+let selectedTables=[], selectedDifficulty=null, maxTime=10;
+let facts=[], current=null, timer=null, elapsed=0;
+let history=[], retryMode=false, practicePool=[];
+
+/* Colors for tables 1..12 (consistent) */
+const tableHues=[10,35,60,90,120,160,200,230,260,290,320,350];
+function tableColor(n, light=86, sat=85){ const hue=tableHues[(n-1)%12]; return `hsl(${hue},${sat}%,${light}%)`; }
+
+/* Assets */
+const emojis=['🐶','🐱','🐭','🦊','🐸','🐵','🐼','🐷','🐔','🐤','🐙','🦄','⭐','🍎','🍓'];
+const encouragements=["Great work!","Nice job!","Awesome!","You got it!","Well done!","Fantastic!","Brilliant!"];
+const oopsMsgs=["Almost!","Try again!","Not quite","Keep going!","You can do it!"];
+
+/* ---------- Audio for chimes (reliable) ---------- */
+let audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx){
+    try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ audioCtx=null; }
+  }
+  if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume(); }
+}
+function playChime(freq){
+  if(!audioCtx) return;
+  const now=audioCtx.currentTime;
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.type='sine'; osc.frequency.setValueAtTime(freq, now);
+  gain.gain.setValueAtTime(0.18, now);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now+0.22);
+  osc.stop(now+0.24);
+}
+document.addEventListener('pointerdown', ensureAudio);
+document.addEventListener('keydown', ensureAudio);
+
+/* ---------- Setup UI ---------- */
+for(let n=1;n<=12;n++){
+  const b=document.createElement('button');
+  b.textContent=n; b.className='table-btn';
+  b.style.background = tableColor(n);
+  b.onclick=()=>{
+    if(selectedTables.includes(n)){selectedTables=selectedTables.filter(x=>x!==n);b.classList.remove('selected');}
+    else{selectedTables.push(n);b.classList.add('selected');}
+    updateStartEnabled();
+  };
+  tableGrid.appendChild(b);
+}
+difficultyGrid.querySelectorAll('.difficulty-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    selectedDifficulty=btn.dataset.level;
+    difficultyGrid.querySelectorAll('.difficulty-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected'); updateStartEnabled();
+  };
+});
+function updateStartEnabled(){
+  startBtn.disabled=!(selectedTables.length>0 && selectedDifficulty);
+  startBtn.classList.toggle('enabled', selectedTables.length>0 && selectedDifficulty);
+}
+startBtn.onclick=()=>startGame();
+restartBtn.onclick=()=>{setupDiv.style.display='block';gameDiv.style.display='none';summaryDiv.style.display='none';resetSelection();};
+restartAllBtn.onclick=()=>location.reload();
+practiceAgainBtn.onclick=()=>practiceAgain();
+
+function resetSelection(){
+  selectedTables=[]; selectedDifficulty=null;
+  tableGrid.querySelectorAll('.table-btn').forEach(b=>b.classList.remove('selected'));
+  difficultyGrid.querySelectorAll('.difficulty-btn').forEach(b=>b.classList.remove('selected'));
+  updateStartEnabled();
+}
+
+/* ---------- Responsive flashcard sizing ---------- */
+function setQSizes(){
+  // Base size from card height
+  const cardHeight = questionEl.clientHeight || 180;
+  let size = Math.max(36, Math.min(96, Math.floor(cardHeight*0.52)));
+  questionEl.style.setProperty('--qsize', size+'px');
+}
+function fitFlashcardToOneLine(){
+  // Ensure the equation + input fit on ONE line inside the card
+  // If too wide, shrink --qsize gradually.
+  let size = parseInt(getComputedStyle(questionEl).getPropertyValue('--qsize')) || 56;
+  let tries=0;
+  // Temporarily ensure no wrap, which we already enforce via CSS.
+  while ((questionEl.scrollWidth > questionEl.clientWidth - 6) && size > 28 && tries < 24){
+    size -= 2;
+    questionEl.style.setProperty('--qsize', size+'px');
+    tries++;
+  }
+}
+
+/* ---------- Game flow ---------- */
+function startGame(){
+  ensureAudio();
+  maxTime={easy:10,medium:7,hard:5,expert:3}[selectedDifficulty]||10;
+  facts=[]; selectedTables.forEach(t=>{ for(let i=1;i<=12;i++) facts.push({a:t,b:i,mastered:false}); });
+  setupDiv.style.display='none'; gameDiv.style.display='block'; summaryDiv.style.display='none';
+  history=[]; retryMode=false; practicePool=[]; practiceAgainBtn.disabled=true;
+  renderQuestionCard(null); // init to compute sizes
+  nextFact();
+}
+
+function nextFact(){
+  clearInterval(timer); elapsed=0;
+  if(facts.filter(f=>!f.mastered).length===0){ showSummary(); return; }
+  if(!retryMode) current=randomUnmastered(); else retryMode=false;
+
+  renderQuestionCard(current);
+  if(answerEl){ answerEl.value=''; answerEl.focus(); }
+  updateProgress();
+  visual.innerHTML='';
+
+  countdownFill.style.transform = 'scaleX(1)';
+  timer=setInterval(()=>{
+    elapsed+=0.1;
+    countdownFill.style.transform = 'scaleX(' + Math.max(0, 1 - (elapsed/maxTime)) + ')';
+    if(elapsed>=maxTime){ clearInterval(timer); markAttempt('timeout'); }
+  },100);
+  scrollToTop();
+}
+
+function renderQuestionCard(fact){
+  questionEl.className='qcard';
+  if(fact){
+    questionEl.style.background = tableColor(fact.a, 88, 82);
+    questionEl.innerHTML=`
+      <span class="qpart" aria-hidden="true">${fact.a}</span>
+      <span class="qpart" aria-hidden="true">×</span>
+      <span class="qpart" aria-hidden="true">${fact.b}</span>
+      <span class="qpart" aria-hidden="true">=</span>
+      <input id="answer" class="inlineInput" type="text" inputmode="numeric" autocomplete="off" placeholder="?" aria-label="Answer" maxlength="3"/>
+    `;
+  }else{
+    questionEl.style.background='hsl(210,50%,96%)';
+    questionEl.innerHTML=`
+      <span class="qpart">Ready?</span>
+      <span class="qpart">Pick a fact…</span>
+      <input id="answer" class="inlineInput" type="text" inputmode="numeric" autocomplete="off" style="opacity:0;width:0;border-bottom:0"/>
+    `;
+  }
+  answerEl=document.getElementById('answer');
+  answerEl.addEventListener('input', onAnswerInput);
+  answerEl.addEventListener('focus', ensureAudio);
+  // Size, then fit to one line if needed
+  setQSizes();
+  fitFlashcardToOneLine();
+}
+
+function randomUnmastered(){
+  const pool=facts.filter(f=>!f.mastered);
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+
+/* ---------- Visuals: 0.5s per group, rising-pitch chimes, pop ---------- */
+function showVisual()
+{
+  try{
+    visual.innerHTML = '';
+    visual.style.transform = 'none';
+    visual.style.width = '';
+    visual.style.transformOrigin = 'left center';
+
+    var emoji = emojis[Math.floor(Math.random()*emojis.length)];
+    var groupCount = current.b;
+    var perGroup = 500;
+    var gap = 8;
+    visual.style.gap = gap + 'px';
+
+    // Conservative initial sizes; we'll scale to fit after render
+    var emojiSize = 22, padY = 6, padX = 8, numFont = 14;
+
+    for (var i=1; i<=groupCount; i++){
+      var g = document.createElement('div'); g.className = 'group';
+      var oval = document.createElement('div'); oval.className = 'oval';
+      oval.style.padding = padY + 'px ' + padX + 'px';
+      for (var j=0; j<current.a; j++){
+        var sp = document.createElement('span'); sp.textContent = emoji; sp.style.fontSize = emojiSize + 'px'; oval.appendChild(sp);
+      }
+      var num = document.createElement('div'); num.className = 'groupNumber';
+      num.style.fontSize = numFont + 'px';
+      num.textContent = (i<groupCount) ? (i*current.a) : '?';
+      g.appendChild(oval); g.appendChild(num); visual.appendChild(g);
+    }
+
+    // After paint, compute exact scale and set matching width so nothing crops
+    setTimeout(function(){
+      try{
+        var containerWidth = visual.clientWidth || Math.floor(window.innerWidth*0.9) || 320;
+        visual.style.transform = 'none';
+        visual.style.width = '';
+        var sw = visual.scrollWidth;
+        if (sw > containerWidth){
+          var scale = containerWidth / sw;
+          if (scale < 0.5) scale = 0.5;
+          visual.style.transform = 'scale(' + scale + ')';
+          visual.style.width = (sw * scale) + 'px';
+        } else {
+          visual.style.transform = 'none';
+          visual.style.width = sw + 'px';
+        }
+      }catch(e){}
+    }, 0);
+
+    // Animate with chimes
+    Array.prototype.forEach.call(visual.children, function(g, idx){
+      setTimeout(function(){
+        try{
+          g.classList.add('show');
+          ensureAudio();
+          var base = 660, step = 110;
+          playChime(base + (idx)*step);
+        }catch(e){}
+      }, (idx+1)*perGroup);
+    });
+
+    var finishDelay = perGroup*groupCount + 350;
+    setTimeout(function(){ if(answerEl){ answerEl.value=''; answerEl.focus(); } }, finishDelay);
+  }catch(e){
+    try{ console.warn('showVisual error', e); }catch(_){}
+  }
+}
+
+
+
+/* ---------- Answer handling ---------- */
+function onAnswerInput(){
+  if(!current) return;
+  // keep only digits, limit to 3
+  let val=(answerEl.value||'').replace(/\D/g,'').slice(0,3);
+  if(answerEl.value!==val) answerEl.value=val;
+
+  const correct=(current.a*current.b).toString();
+  if(val===correct){
+    clearInterval(timer);
+    markAttempt('correct');
+  }else if(val.length===correct.length && val!==correct){
+    clearInterval(timer);
+    markAttempt('wrong');
+  }
+}
+
+function markAttempt(result){
+  if(result==='correct' && !retryMode){ current.mastered=true; }
+  if(result==='wrong' || result==='timeout'){ retryMode=true; showVisual(); }
+
+  history.push({fact:{a:current.a,b:current.b},result,time:elapsed.toFixed(1)});
+
+  if(result==='correct'){ messageEl.textContent=randomFrom(encouragements); }
+  else{ messageEl.textContent=(result==='wrong')? randomFrom(oopsMsgs) : 'Time Out'; }
+  messageEl.className='msg show '+(result==='correct'?'correct':result==='wrong'?'wrong':'timeout');
+
+  setTimeout(()=>{ messageEl.className='msg'; if(result==='correct') nextFact(); }, result==='correct'?1800:0);
+}
+
+function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+/* ---------- Progress ---------- */
+function updateProgress(){
+  const total=facts.length, mastered=facts.filter(f=>f.mastered).length;
+  progressText.textContent=`${mastered}/${total} mastered`;
+  progressFill.style.width=`${total?(100*mastered/total):0}%`;
+}
+
+/* ---------- Summary ---------- */
+function showSummary(){
+  clearInterval(timer);
+  gameDiv.style.display='none'; summaryDiv.style.display='block';
+  summaryTable.innerHTML=''; practiceList.innerHTML=''; practicePool=[];
+
+  history.forEach((h,i)=>{
+    const tr=document.createElement('tr');
+    let icon=''; 
+    if(h.result==='correct') icon='✅';
+    else if(h.result==='wrong'){icon='❌'; practicePool.push({a:h.fact.a,b:h.fact.b,mastered:false});}
+    else {icon='⏱'; practicePool.push({a:h.fact.a,b:h.fact.b,mastered:false});}
+    tr.innerHTML=`<td>${i+1}</td><td>${h.fact.a}×${h.fact.b}</td><td class="resultIcon">${icon}</td><td>${h.time}s</td>`;
+    summaryTable.appendChild(tr);
+  });
+
+  if(practicePool.length>0){
+    // Deduplicate & build pastel cards (color reflects the table 'a')
+    const unique=[]; const seen=new Set();
+    practicePool.forEach(f=>{ const k=`${f.a}x${f.b}`; if(!seen.has(k)){ seen.add(k); unique.push(f); }});
+    practicePool=unique;
+
+    const cards=document.createElement('div'); cards.className='practice-cards';
+    unique.forEach(f=>{
+      const card=document.createElement('div'); card.className='flashcard';
+      card.style.background = tableColor(f.a, 86, 85);
+      card.textContent=`${f.a}×${f.b}`;
+      cards.appendChild(card);
+    });
+    practiceList.innerHTML='<h3>Facts to Practice Again:</h3>';
+    practiceList.appendChild(cards);
+    practiceAgainBtn.disabled=false;
+  } else {
+    practiceList.innerHTML='<p style="color:#666;text-align:center">No facts to practice — great job!</p>';
+    practiceAgainBtn.disabled=true;
+  }
+}
+
+function practiceAgain(){
+  if(!practicePool || practicePool.length===0) return;
+  facts = practicePool.map(f=>({a:f.a,b:f.b,mastered:false}));
+  history=[]; retryMode=false; practicePool=[]; practiceAgainBtn.disabled=true;
+  summaryDiv.style.display='none'; gameDiv.style.display='block';
+  nextFact();
+}
+
+/* ---------- Utils ---------- */
+function scrollToTop(){ document.body.scrollTop=0; document.documentElement.scrollTop=0; }
+function setQSizesOnEvents(){ setQSizes(); fitFlashcardToOneLine(); }
+window.addEventListener('load', setQSizesOnEvents);
+window.addEventListener('resize', setQSizesOnEvents);
+window.addEventListener('orientationchange', setQSizesOnEvents);
+</script>
+
+
+
+
+<!-- Visuals width fitter injected (V65: smaller 1–4 groups + tighter padding) -->
+<script>
+(function(){
+  try{
+    var visual = document.getElementById('visual');
+    var wrap = document.getElementById('visualWrap');
+    if(!visual) return;
+
+    function imp(el, prop, val){
+      try{ el.style.setProperty(prop, val, 'important'); }catch(e){ el.style[prop] = val; }
+    }
+    function cw(){
+      var p = visual.parentElement || visual;
+      var r = p.getBoundingClientRect();
+      return Math.max(120, Math.floor((r && r.width) ? r.width : (p.clientWidth || Math.floor(window.innerWidth*0.9) || 320)));
+    }
+    function emojiCap(containerW, groupCount){
+      // more conservative baseline
+      var per = Math.max(1, containerW / Math.max(1, groupCount));
+      var cap = Math.floor(per * 0.22); // tighter than V64
+      // absolute ceilings — much smaller for 1–4
+      if (groupCount <= 2) cap = Math.min(cap, 36);
+      else if (groupCount <= 4) cap = Math.min(cap, 32);
+      else if (groupCount <= 6) cap = Math.min(cap, 44);
+      else if (groupCount <= 8) cap = Math.min(cap, 38);
+      else cap = Math.min(cap, 30);
+      return Math.max(12, cap);
+    }
+
+    function applyAll(fs, px, py, nf, gp){
+      // enforce minimum padding & visible gap (min padding is lower for 1–4 groups)
+      var width = cw();
+      var minGap = width < 400 ? 4 : 6;
+      var gc = (visual.querySelectorAll('.group').length || 1);
+      var minPad = (gc <= 4) ? 2 : 4;
+      px = Math.max(minPad, px); py = Math.max(minPad, py);
+      var spans = visual.querySelectorAll('.oval span');
+      var ovals = visual.querySelectorAll('.oval');
+      var nums  = visual.querySelectorAll('.groupNumber');
+      for (var k=0;k<spans.length;k++){
+        imp(spans[k], 'font-size', fs + 'px');
+        imp(spans[k], 'line-height', '1');
+      }
+      for (var k2=0;k2<ovals.length;k2++){
+        imp(ovals[k2], 'padding', py + 'px ' + px + 'px');
+        imp(ovals[k2], 'min-width', '0');
+      }
+      for (var k3=0;k3<nums.length;k3++){
+        imp(nums[k3], 'font-size', nf + 'px');
+      }
+      imp(visual, 'gap', Math.max(minGap, gp) + 'px');
+      imp(visual, 'justify-content', 'flex-start');
+      // also a tiny margin so groups never touch visually
+      var grps = visual.querySelectorAll('.group');
+      var half = Math.floor(Math.max(minGap, gp)/2);
+      for (var g=0; g<grps.length; g++){
+        imp(grps[g], 'margin-left', half + 'px');
+        imp(grps[g], 'margin-right', half + 'px');
+      }
+    }
+
+    function fitGroupsToWidth(){
+      if(!visual.children || !visual.children.length) return;
+      // reset transforms/width and wrapper overflow
+      imp(visual, 'transform', 'none');
+      imp(visual, 'width', '');
+      if(wrap){ imp(wrap, 'overflow-x', 'visible'); }
+
+      var groups = visual.querySelectorAll('.group');
+      var groupCount = groups.length || 1;
+      var W = cw();
+
+      // initial compact sizing (even slimmer padding for 1–4 groups)
+      var margin = 6;
+      var basePerGroup = (W - margin) / groupCount;
+      var gap = (groupCount >= 9) ? 0 : 6;
+      var padFactor = (groupCount <= 4) ? 0.06 : 0.12;
+      var padX = (groupCount >= 9) ? 0 : Math.max(1, Math.floor(basePerGroup * padFactor));
+      var padY = (groupCount >= 9) ? 0 : Math.max(1, Math.floor(basePerGroup * Math.max(0.05, padFactor - 0.02)));
+      var emojiSize = Math.max(4, Math.floor(basePerGroup - 2*padX));
+      var numFont   = Math.max(8, Math.min(16, Math.floor(emojiSize * 0.50)));
+
+      // hard cap for all group counts
+      var cap = emojiCap(W, groupCount);
+      if (emojiSize > cap) emojiSize = cap;
+
+      applyAll(emojiSize, padX, padY, numFont, gap);
+
+      // tighten proportionally until it fits
+      var guard = 0;
+      function overflows(){ return visual.scrollWidth > W + 1; }
+      while (overflows() && guard < 50){
+        emojiSize = Math.max(10, Math.floor(emojiSize * 0.88));
+        if (padX > 0) padX = Math.max(0, Math.floor(padX * 0.85));
+        if (padY > 0) padY = Math.max(0, Math.floor(padY * 0.85));
+        if (gap  > 2) gap  = Math.max(2, Math.floor(gap  * 0.85));
+        if (numFont > 9) numFont = Math.max(9, Math.floor(numFont * 0.92));
+        // keep enforcing cap
+        if (emojiSize > cap) emojiSize = cap;
+        applyAll(emojiSize, padX, padY, numFont, gap);
+        guard++;
+      }
+
+      // gentle relax but never above cap
+      var relax=0;
+      while (visual.scrollWidth < W*0.90 && relax < 6){
+        emojiSize = Math.min(cap, emojiSize + 1);
+        applyAll(emojiSize, padX, padY, numFont, gap);
+        relax++;
+      }
+
+      // final fallback: sync scale + width
+      if (visual.scrollWidth > W){
+        var sw = visual.scrollWidth;
+        var scale = W / sw;
+        if (scale < 0.40) scale = 0.40;
+        imp(visual, 'transform', 'scale(' + scale + ')');
+        imp(visual, 'width', (sw * scale) + 'px');
+      } else {
+        imp(visual, 'transform', 'none');
+        imp(visual, 'width', visual.scrollWidth + 'px');
+      }
+    }
+
+    // Observe renders and fit
+    var mo = new MutationObserver(function(){ try{ fitGroupsToWidth(); }catch(e){} });
+    mo.observe(visual, { childList: true, subtree: true });
+    // Fit on first paint
+    setTimeout(function(){ try{ fitGroupsToWidth(); }catch(e){} }, 0);
+    // Refit on resize / orientation
+    var pending=null;
+    function queueFit(){ if(pending) return; pending = setTimeout(function(){ pending=null; try{ fitGroupsToWidth(); }catch(e){} }, 60); }
+    window.addEventListener('resize', queueFit);
+    window.addEventListener('orientationchange', queueFit);
+  }catch(e){}
+})();
+</script>
+
+
+</body>
+</html>
